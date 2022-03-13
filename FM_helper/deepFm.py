@@ -1,3 +1,9 @@
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 # deepFM： 标准的。 或者上述k个元素作为特征统一拼到deep的
 # 主要先留着初始化方式，备用
 class deepFM(nn.Module):

@@ -76,6 +76,7 @@ raw_df[con_col]=ss.transform(raw_df[con_col])     # 测试做相同处理
 
 from  Fmdata import FeaturePosTrans
 from FMmodel import FM
+from deepFm import deepFM
 f_trans=FeaturePosTrans(dis_col,con_col,0)           # 映射到对应id. 出现10次以下的作为UNK
 f_trans.fit(raw_df)
 feature_pos,feature_values=f_trans.transform(raw_df,label)  # 测试集做相同处理。用相同的原始con_col,dis_col。 label只是用来删除掉该列
@@ -84,7 +85,7 @@ cols=dis_col+con_col
 args.dis_col=dis_col
 args.con_col=con_col
 args.f_trans=f_trans
-args.hiddens=args.hiddens.split(',')
+args.hiddens=[int(h) for h in args.hiddens.split(',')]
 # 设置设备为某固定gpu
 args.cuda = (not args.no_cuda)  and  (torch.cuda.is_available())
 if args.cuda:
@@ -95,8 +96,8 @@ class WrapModel(object):
         # 初始化模型
         n_field=len(args.dis_col+args.con_col)                # 原始特征数目
         n_features=len(args.f_trans.feature_id_map)           # 连续+离散特征one-hot后的特征总数目 (算上一个NAN padding)
-        model=FM(n_field,n_features,args.embed_size,args.dropout)
-        #self.model=deepFM(n_field,n_features,args.embed_size,args.hiddens,args.dropout,args.batchnorm)
+        #model=FM(n_field,n_features,args.embed_size,args.dropout)
+        model=deepFM(n_field,n_features,args.embed_size,args.hiddens,args.dropout,args.batchnorm)
         
         if state_dict:                                        # 加载保存过的模型参数（如果有）
             model.load_state_dict(state_dict)
