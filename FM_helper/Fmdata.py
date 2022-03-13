@@ -4,106 +4,121 @@ from sklearn.base import BaseEstimator, TransformerMixin
 import pandas as pd
 import numpy as np
 import os
+from sklearn.base import BaseEstimator, TransformerMixin
+import pandas as pd
+import numpy as np
+import os
+
+
 class FeaturePosTrans(BaseEstimator, TransformerMixin):
-    def __init__(self, dis_col=None, con_col= None, limit_freq = 0):
-        self.dis_col=dis_col
-        self.con_col=con_col
-        self.limit_freq=limit_freq
-        
+    def __init__(self, dis_col=None, con_col=None, limit_freq=0):
+        self.dis_col = dis_col
+        self.con_col = con_col
+        self.limit_freq = limit_freq
+
         self.NULL = '<NULL>'
-        self.UNK = '<UNK>'                                                # nlp里。低频是1，NAN是0. NAN作为padding,不参与训练且是0
-                                                                          # NAN对应embedding： padding_index=0.只占位，不训练）
-                                                                          # nn.Embedding(V,d,padding_idx=0
-    
-        self.dis_col_map=dict()                                            # 按特征，记录取值到位置id的映射  只用来存着
-        self.feature_id_map=dict()                                         # 特征名到位置id的映射大表 {特征名_取值：位置id}
-        self.pos=0                                                         # 位置id
-        self.dis_col_count=dict()                                          # 每个离散特征的取值数目
-        
-        
+        self.UNK = '<UNK>'  # nlp里。低频是1，NAN是0. NAN作为padding,不参与训练且是0
+        # NAN对应embedding： padding_index=0.只占位，不训练）
+        # nn.Embedding(V,d,padding_idx=0
+
+        self.dis_col_map = dict()  # 按特征，记录取值到位置id的映射  只用来存着
+        self.feature_id_map = dict()  # 特征名到位置id的映射大表 {特征名_取值：位置id}
+        self.pos = 0  # 位置id
+        self.dis_col_count = dict()  # 每个离散特征的取值数目
+
         # 所有离散的缺失值，统一用NAN编码，之后在w，E中padding成0
-        self.feature_id_map[self.NULL]=0
-        self.pos+=1
-        
-        if (con_col!=None):
-            self.feature_id_map.update(dict(zip(con_col,range(self.pos,self.pos+len(con_col))))) # 连续特征到对应位置的映射
-            self.pos+=len(self.con_col)
+        self.feature_id_map[self.NULL] = 0
+        self.pos += 1
 
+        if (con_col != None):
+            self.feature_id_map.update(dict(zip(con_col, range(self.pos, self.pos + len(con_col)))))  # 连续特征到对应位置的映射
+            self.pos += len(self.con_col)
 
-        
-    def fit(self, X , y = None):
-        
-        if (self.dis_col!=None):
+    def fit(self, X, y=None):
+
+        if (self.dis_col != None):
             # 每个离散特征取值,映射到对应id
             for col in self.dis_col:
-                valueCount=dict(X[col].value_counts())                       # 该离散特征。每个取值的出现数目
+                valueCount = dict(X[col].value_counts())  # 该离散特征。每个取值的出现数目
                 # 是否特殊处理低频取值
-                if self.limit_freq>0:
-                    values=[k for k,v in valueCount.items() if k!=self.NULL and v>self.limit_freq]  # 该特征留下的取值
-                    self.dis_col_map[col]=dict(zip(values,range(self.pos+1,self.pos+1+len(values))))
-                    self.dis_col_map[col][self.UNK]=self.pos
+                if self.limit_freq > 0:
+                    values = [k for k, v in valueCount.items() if k != self.NULL and v > self.limit_freq]  # 该特征留下的取值
+                    self.dis_col_map[col] = dict(zip(values, range(self.pos + 1, self.pos + 1 + len(values))))
+                    self.dis_col_map[col][self.UNK] = self.pos
                     # 组织大表。类似
-                    new_values=[col+"_"+v for v in values]                    # { C1_v1：id}  
-                    self.feature_id_map.update(dict(zip(new_values,range(self.pos+1,self.pos+1+len(new_values)))))
-                    self.feature_id_map[col+"_"+self.UNK]=self.pos
-                    self.pos+=len(new_values)+1                              # 每个特征留下：所有高频取值+UNK                                   
+                    new_values = [col + "_" + v for v in values]  # { C1_v1：id}
+                    self.feature_id_map.update(
+                        dict(zip(new_values, range(self.pos + 1, self.pos + 1 + len(new_values)))))
+                    self.feature_id_map[col + "_" + self.UNK] = self.pos
+                    self.pos += len(new_values) + 1  # 每个特征留下：所有高频取值+UNK
                 else:
                     # 每个特征。分别记录映射
-                    values=[k for k in valueCount.keys() if k!=self.NULL]    # 该离散特征所有取值（除缺失值） 
-                    self.dis_col_map[col]=dict(zip(values,range(self.pos,self.pos+len(values))))
+                    values = [k for k in valueCount.keys() if k != self.NULL]  # 该离散特征所有取值（除缺失值）
+                    self.dis_col_map[col] = dict(zip(values, range(self.pos, self.pos + len(values))))
                     # 类似，但根据取值记在大map里
-                    new_values=[col+"_"+v for v in values]                   # { C1_v1：id}  
-                    self.feature_id_map.update(dict(zip(new_values,range(self.pos,self.pos+len(new_values)))))
-                    self.pos+=len(new_values)
-                    
-                 # 每个离散特征的有效取值数目(不含NAN，含每个特征的unk)
-                self.dis_col_count[col]=len(self.dis_col_map[col])                            
-                                                                               
-    def transform(self, X, y=None):
+                    new_values = [col + "_" + v for v in values]  # { C1_v1：id}
+                    self.feature_id_map.update(dict(zip(new_values, range(self.pos, self.pos + len(new_values)))))
+                    self.pos += len(new_values)
+
+                # 每个离散特征的有效取值数目(不含NAN，含每个特征的unk)
+                self.dis_col_count[col] = len(self.dis_col_map[col])
+
+    def transform(self, X, label=None):
         # 映射：
-        feature_pos=X.copy()                        # 样本每个特征对应的位置
-        feature_values=X.copy()                     # 样本每个特征的取值。离散特征取值是1.
-        cols=self.dis_col+self.con_col
+        feature_pos = X.copy()  # 样本每个特征对应的位置
+        feature_values = X.copy()  # 样本每个特征的取值。离散特征取值是1.
+        cols = self.dis_col + self.con_col
+
+        # 如果有target列，删掉target列
+        if label in feature_pos.columns:
+            feature_pos = feature_pos.drop([label], axis=1)
+            feature_values = feature_values.drop([label], axis=1)  # 特征列去掉label
+
         for col in cols:
             if col in self.dis_col:
-                #values=X[col].apply(self.gen,args=(col,)).values
-                values=X[col].apply(self.gen2,args=(col,)).values    # 组织形式不同。映射效果相同。用这个好些
-                feature_pos[col]=values
-                feature_values[col]=1.0
+                # values=X[col].apply(self.gen,args=(col,)).values
+                values = X[col].apply(self.gen2, args=(col,)).values  # 组织形式不同。映射效果相同。用这个好些
+                feature_pos[col] = values
+                feature_values[col] = 1.0
             else:
-                feature_pos[col]=self.feature_id_map[col]            # 连续特征取值不变  。 位置是映射后的id       
-        return feature_pos,feature_values
-        
+                feature_pos[col] = self.feature_id_map[col]  # 连续特征取值不变  。 位置是映射后的id
+
+        # 映射完的取值（包括离散特征取值1.0），也都变成float32
+        feature_values = feature_values.astype(np.float32)
+
+        return feature_pos, feature_values
+
     # 如果是多列。传入的x是该列对应的series. 输出的是这些列拼起来的df
     # 如果是单列，传入的x是该列的每个元素    输出的是该列对应的Series
     # 根据离散特征取值，返回对应的位置id
-    def gen(self,x,col):
-        if x==self.NULL:                                        # NAN统一映射到0
+    def gen(self, x, col):
+        if x == self.NULL:  # NAN统一映射到0
             return 0
         else:
             if x in self.dis_col_map[col]:
-                return self.dis_col_map[col][x]                 # 按取值，映射到对应位置id
+                return self.dis_col_map[col][x]  # 按取值，映射到对应位置id
             else:
-                if self.limit_freq>0:
-                    return self.dis_col_map[col][self.UNK]       # 低频取值/没见过的值。映射到unqkey对应的编码 
+                if self.limit_freq > 0:
+                    return self.dis_col_map[col][self.UNK]  # 低频取值/没见过的值。映射到unqkey对应的编码
                 else:
-                    return 0                                     # 没见过的值。映射到NAN==0。没有贡献
+                    return 0  # 没见过的值。映射到NAN==0。没有贡献
 
     # 用大表做映射。类似
-    def gen2(self,x,col):    
-        if x==self.NULL:                                         # NAN统一映射到0
+    def gen2(self, x, col):
+        if x == self.NULL:  # NAN统一映射到0
             return 0
         else:
-            x=col+"_"+x
-            if x in self.feature_id_map:                         # 其他按取值，映射到对应位置id
-                return self.feature_id_map[x]                 
+            x = col + "_" + x
+            if x in self.feature_id_map:  # 其他按取值，映射到对应位置id
+                return self.feature_id_map[x]
             else:
-                if self.limit_freq>0:                
-                    return self.feature_id_map[col+"_"+self.UNK] # 低频取值/没见过的值。映射到该特征unqkey对应的编码 
+                if self.limit_freq > 0:
+                    return self.feature_id_map[col + "_" + self.UNK]  # 低频取值/没见过的值。映射到该特征unqkey对应的编码
                 else:
-                    return 0                                     # 没见过的值。映射到NAN。没有贡献
+                    return 0  # 没见过的值。映射到NAN。没有贡献
+
     def id2name(self):
-        return dict(zip(self.feature_id_map.values(),self.feature_id_map.keys()))
+        return dict(zip(self.feature_id_map.values(), self.feature_id_map.keys()))
 
 
 # 分别找出连续列/离散列
